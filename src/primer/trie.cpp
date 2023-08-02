@@ -84,10 +84,12 @@ auto Trie::Remove(std::string_view key) const -> Trie {
     }
     if (index == length - 1) {
       auto target_node = curr_ptr->children_.at(k);
-      if (target_node->children_.empty()) {  // If a node doesn't have children any more, you should remove it.
+      if (target_node->children_.empty()) {
+        // If a node doesn't have children any more, you should remove it.
         remove_node = nullptr;
-      } else if (target_node->is_value_node_) {  // If the node doesn't contain a value any more, you should convert it
-                                                 // to `TrieNode`.
+      } else if (target_node->is_value_node_) {
+        // If the node doesn't contain a value any more,
+        // you should convert it to `TrieNode`.
         remove_node = target_node->TrieNode::Clone();
       } else {
         return Trie(root_);
