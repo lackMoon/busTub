@@ -45,12 +45,11 @@ class StringExpression : public AbstractExpression {
   }
 
   auto Compute(const std::string &val) const -> std::string {
-    std::string value;
-    value.assign(val);
+    std::string value = val;
     if (fmt::underlying(expr_type_) == 0) {
-      std::transform(val.cbegin(), val.cend(), value.begin(), ::tolower);
+      std::transform(value.begin(), value.end(), value.begin(), ::tolower);
     } else {
-      std::transform(val.cbegin(), val.cend(), value.begin(), ::toupper);
+      std::transform(value.begin(), value.end(), value.begin(), ::toupper);
     }
     return value;
   }
