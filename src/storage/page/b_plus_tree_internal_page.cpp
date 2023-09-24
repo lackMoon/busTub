@@ -9,11 +9,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <iostream>
-#include <sstream>
-
-#include "common/exception.h"
 #include "storage/page/b_plus_tree_internal_page.h"
+#include "common/exception.h"
+#include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
 /*****************************************************************************
@@ -24,7 +22,21 @@ namespace bustub {
  * Including set page type, set current size, and set max page size
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {
+  SetPageType(IndexPageType::INTERNAL_PAGE);
+  SetSize(0);
+  SetMaxSize(max_size);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(MappingType *array, int start, int end, int max_size) {
+  SetPageType(IndexPageType::INTERNAL_PAGE);
+  SetSize(end - start);
+  SetMaxSize(max_size);
+  array_[0].second = array[start].second;
+  std::copy(array + start + 1, array + end, array_ + 1);
+}
+
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
  * array offset)
@@ -32,19 +44,80 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {}
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
   // replace with your own code
-  KeyType key{};
-  return key;
+  return array_[index].first;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
+  if (index == 0) {
+    throw Exception(ExceptionType::INVALID, "B+ Tree: the index of the key in internal page must be non-zero");
+  }
+  array_[index].first = key;
+}
 
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
  * offset)
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType { return 0; }
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType { return array_[index].second; }
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Split(BufferPoolManager *bpm, page_id_t *page_id) -> KeyType {
+  int size = GetSize();
+  auto new_page_guard = bpm->NewPageGuarded(page_id);
+  auto new_page = new_page_guard.AsMut<B_PLUS_TREE_INTERNAL_PAGE_TYPE>();
+  KeyType new_key = array_[size / 2].first;
+  new_page->Init(array_, size / 2, size, GetMaxSize());
+  SetSize(size / 2);
+  return new_key;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Find(KeyType key, KeyComparator &comparator) const -> std::pair<int, int> {
+  int left = 1;
+  int right = GetSize() - 1;
+  int mid = -1;
+  int flg = 0;
+  while (left <= right) {
+    mid = (left + right) >> 1;
+    int result = comparator(key, array_[mid].first);
+    if (result < 0) {
+      flg = COMPARE_LESS;
+      right = mid - 1;
+    } else if (result > 0) {
+      flg = COMPARE_GREATER;
+      left = mid + 1;
+    } else {
+      flg = COMPARE_EQUAL;
+      break;
+    }
+  }
+  return std::make_pair(mid, flg);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, KeyComparator &comparator)
+    -> bool {
+  int size = GetSize();
+  std::pair<int, int> target_pair = Find(key, comparator);
+  int index = target_pair.first;
+  int flg = target_pair.second;
+  if (flg == COMPARE_EQUAL) {  // Duplicate Key
+    return false;
+  }
+  if (flg == COMPARE_GREATER && index > size) {  // Back Insert
+    array_[++index] = MappingType(key, value);
+  } else {
+    index = (flg == COMPARE_LESS) ? index : index + 1;
+    for (int i = size; i > index; i--) {
+      array_[i] = array_[i - 1];
+    }
+    array_[index] = MappingType(key, value);
+  }
+  IncreaseSize(1);
+  return true;
+}
 
 // valuetype for internalNode should be page id_t
 template class BPlusTreeInternalPage<GenericKey<4>, page_id_t, GenericComparator<4>>;

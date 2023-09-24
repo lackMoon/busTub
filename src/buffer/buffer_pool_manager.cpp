@@ -48,9 +48,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
   Page *fetch_page;
   if (page_table_.count(page_id) == 1) {
     fetch_page = GetPage(page_id, &frame_id);
-    fetch_page->pin_count_++;
-    replacer_->RecordAccess(frame_id);
-    replacer_->SetEvictable(frame_id, false);
+    AccessPage(fetch_page, frame_id);
   } else {
     fetch_page = CreatePage(page_id);
     if (fetch_page == nullptr) {
@@ -147,6 +145,12 @@ auto BufferPoolManager::GetPage(page_id_t page_id, frame_id_t *frame_id) -> Page
   return &page;
 }
 
+void BufferPoolManager::AccessPage(Page *page, frame_id_t frame_id) {
+  page->pin_count_++;
+  replacer_->RecordAccess(frame_id);
+  replacer_->SetEvictable(frame_id, false);
+}
+
 auto BufferPoolManager::CreatePage(page_id_t page_id) -> Page * {
   frame_id_t frame_id;
   if (!free_list_.empty()) {
@@ -165,9 +169,7 @@ auto BufferPoolManager::CreatePage(page_id_t page_id) -> Page * {
   }
   page.ResetMemory();
   page.page_id_ = page_id;
-  page.pin_count_++;
-  replacer_->SetEvictable(frame_id, false);
-  replacer_->RecordAccess(frame_id);
+  AccessPage(&page, frame_id);
   page_table_.erase(old_page_id);
   page_table_[page_id] = frame_id;
   return &page;

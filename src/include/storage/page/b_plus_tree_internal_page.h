@@ -12,6 +12,7 @@
 
 #include <queue>
 #include <string>
+#include <utility>
 
 #include "storage/page/b_plus_tree_page.h"
 
@@ -47,6 +48,7 @@ class BPlusTreeInternalPage : public BPlusTreePage {
    */
   void Init(int max_size = INTERNAL_PAGE_SIZE);
 
+  void Init(MappingType *array, int start, int end, int max_size = INTERNAL_PAGE_SIZE);
   /**
    * @param index The index of the key to get. Index must be non-zero.
    * @return Key at index
@@ -98,6 +100,12 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
     return kstr;
   }
+
+  auto Split(BufferPoolManager *bpm, page_id_t *page_id) -> KeyType;
+
+  auto Find(KeyType key, KeyComparator &comparator) const -> std::pair<int, int>;
+
+  auto Insert(const KeyType &key, const ValueType &value, KeyComparator &comparator) -> bool;
 
  private:
   // Flexible array member for page data.

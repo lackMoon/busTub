@@ -93,8 +93,7 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
     throw Exception(ExceptionType::INVALID, "LRU-K REPLACER: the given frame_id is a invalid id");
   }
   auto &node = nodes_[node_store_.at(frame_id)];
-  bool evictable = set_evictable ^ node.is_evictable_;
-  if (!evictable) {
+  if ((set_evictable ^ node.is_evictable_) == 0) {
     return;
   }
   node.is_evictable_ = set_evictable;

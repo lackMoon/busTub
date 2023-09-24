@@ -12,11 +12,11 @@
 
 #include <algorithm>
 #include <deque>
-#include <iostream>
 #include <optional>
 #include <queue>
 #include <shared_mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/config.h"
@@ -26,6 +26,7 @@
 #include "storage/page/b_plus_tree_header_page.h"
 #include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_leaf_page.h"
+#include "storage/page/b_plus_tree_page.h"
 #include "storage/page/page_guard.h"
 
 namespace bustub {
@@ -141,6 +142,15 @@ class BPlusTree {
    */
   auto ToPrintableBPlusTree(page_id_t root_id) -> PrintableBPlusTree;
 
+  auto GetIndex(std::pair<int, int> pair) const -> int;
+
+  auto InsertNode(WritePageGuard guard, const KeyType &key, const ValueType &value, Context *ctx) -> bool;
+
+  auto InsertLeaf(WritePageGuard guard, const KeyType &key, const ValueType &value, Context *ctx) -> bool;
+
+  auto InsertInternal(WritePageGuard guard, const KeyType &key, const ValueType &value, Context *ctx) -> bool;
+
+  auto CreateNewRoot(std::pair<KeyType, page_id_t> *array, Context *ctx) -> bool;
   // member variable
   std::string index_name_;
   BufferPoolManager *bpm_;

@@ -193,7 +193,6 @@ class BufferPoolManager {
   /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
   std::mutex latch_;
 
-  auto GetPage(page_id_t page_id, frame_id_t *frame_id) -> Page *;
   /**
    * @brief Allocate a page on disk. Caller should acquire the latch before calling this function.
    * @return the id of the allocated page
@@ -208,7 +207,8 @@ class BufferPoolManager {
     // This is a no-nop right now without a more complex data structure to track deallocated pages
   }
 
-  // TODO(student): You may add additional private members and helper functions
+  auto GetPage(page_id_t page_id, frame_id_t *frame_id) -> Page *;
+  void AccessPage(Page *page, frame_id_t frame_id);
   auto CreatePage(page_id_t page_id) -> Page *;
 };
 }  // namespace bustub
