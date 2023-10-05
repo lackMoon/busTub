@@ -34,7 +34,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(MappingType *array, int start, int end
   SetSize(end - start);
   SetMaxSize(max_size);
   array_[0].second = array[start].second;
-  std::copy(array + start + 1, array + end, array_ + 1);
+  Copy(array, start + 1, end, 1);
 }
 
 /*
@@ -63,6 +63,9 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType { return array_[index].second; }
 
 INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::All() const -> const MappingType * { return array_; }
+
+INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Split(BufferPoolManager *bpm, page_id_t *page_id) -> KeyType {
   int size = GetSize();
   auto new_page_guard = bpm->NewPageGuarded(page_id);
@@ -79,9 +82,18 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Find(KeyType key, KeyComparator &comparator
   int right = GetSize() - 1;
   int mid = -1;
   int flg = 0;
+  int result;
+  if ((result = comparator(key, array_[left].first)) <= 0) {
+    flg = result < 0 ? COMPARE_LESS : COMPARE_EQUAL;
+    return std::make_pair(left, flg);
+  }
+  if ((result = comparator(key, array_[right].first)) >= 0) {
+    flg = result > 0 ? COMPARE_GREATER : COMPARE_EQUAL;
+    return std::make_pair(right, flg);
+  }
   while (left <= right) {
     mid = (left + right) >> 1;
-    int result = comparator(key, array_[mid].first);
+    result = comparator(key, array_[mid].first);
     if (result < 0) {
       flg = COMPARE_LESS;
       right = mid - 1;
@@ -106,17 +118,59 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(const KeyType &key, const ValueType 
   if (flg == COMPARE_EQUAL) {  // Duplicate Key
     return false;
   }
-  if (flg == COMPARE_GREATER && index > size) {  // Back Insert
+  if (flg == COMPARE_GREATER && index >= size - 1) {  // Back Insert
     array_[++index] = MappingType(key, value);
   } else {
     index = (flg == COMPARE_LESS) ? index : index + 1;
     for (int i = size; i > index; i--) {
       array_[i] = array_[i - 1];
     }
-    array_[index] = MappingType(key, value);
+    if (index == 0) {
+      array_[0].second = value;
+      array_[1].first = key;
+    } else {
+      array_[index] = MappingType(key, value);
+    }
   }
   IncreaseSize(1);
   return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertHead(const KeyType &key, const ValueType &value) {
+  int size = GetSize();
+  for (int i = size; i > 0; i--) {
+    array_[i] = array_[i - 1];
+  }
+  array_[1].first = key;
+  array_[0].second = value;
+  IncreaseSize(1);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(const KeyType &key, KeyComparator &comparator) {
+  std::pair<int, int> target_pair = Find(key, comparator);
+  int index = target_pair.first;
+  int flg = target_pair.second;
+  if (index == -1 || flg != COMPARE_EQUAL) {  // No target key
+    return;
+  }
+  Remove(index);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(int index) {
+  int size = GetSize();
+  if (index < size - 1) {
+    if (index == 0) {
+      array_[0].second = array_[1].second;
+      index++;
+    }
+    for (int i = index; i < size; i++) {
+      array_[i] = array_[i + 1];
+    }
+  }
+  IncreaseSize(-1);
 }
 
 // valuetype for internalNode should be page id_t

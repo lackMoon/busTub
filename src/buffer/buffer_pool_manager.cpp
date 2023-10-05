@@ -122,7 +122,8 @@ auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard { re
 auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
   Page *page = FetchPage(page_id);
   if (page == nullptr) {
-    return {this, nullptr};
+    throw Exception(ExceptionType::EXECUTION,
+                    "BUFFER POOL MANAGER: error occured in FetchPageRead -- No available Page");
   }
   page->RLatch();
   return {this, page};
@@ -131,7 +132,8 @@ auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
 auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
   Page *page = FetchPage(page_id);
   if (page == nullptr) {
-    return {this, nullptr};
+    throw Exception(ExceptionType::EXECUTION,
+                    "BUFFER POOL MANAGER: error occured in FetchPageWrite -- No available Page");
   }
   page->WLatch();
   return {this, page};

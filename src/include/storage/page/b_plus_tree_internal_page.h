@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <algorithm>
 #include <queue>
 #include <string>
 #include <utility>
@@ -37,6 +38,9 @@ namespace bustub {
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeInternalPage : public BPlusTreePage {
  public:
+  inline void Copy(const MappingType *array, int start, int end, int dest) {
+    std::copy(array + start, array + end, array_ + dest);
+  }
   // Deleted to disallow initialization
   BPlusTreeInternalPage() = delete;
   BPlusTreeInternalPage(const BPlusTreeInternalPage &other) = delete;
@@ -75,6 +79,8 @@ class BPlusTreeInternalPage : public BPlusTreePage {
    */
   auto ValueAt(int index) const -> ValueType;
 
+  auto All() const -> const MappingType *;
+
   /**
    * @brief For test only, return a string representing all keys in
    * this internal page, formatted as "(key1,key2,key3,...)"
@@ -106,6 +112,12 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   auto Find(KeyType key, KeyComparator &comparator) const -> std::pair<int, int>;
 
   auto Insert(const KeyType &key, const ValueType &value, KeyComparator &comparator) -> bool;
+
+  void InsertHead(const KeyType &key, const ValueType &value);
+
+  void Remove(const KeyType &key, KeyComparator &comparator);
+
+  void Remove(int index);
 
  private:
   // Flexible array member for page data.

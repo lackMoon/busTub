@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "storage/page/b_plus_tree_leaf_page.h"
+#include <algorithm>
 #include "common/config.h"
 #include "common/exception.h"
 #include "common/rid.h"
@@ -38,7 +39,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(MappingType *array, int start, int end, in
   SetPageType(IndexPageType::LEAF_PAGE);
   SetSize(end - start);
   SetMaxSize(max_size);
-  std::copy(array + start, array + end, array_);
+  Copy(array, start, end, 0);
   next_page_id_ = INVALID_PAGE_ID;
 }
 
@@ -66,11 +67,18 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType { return array_[index].second; }
 
 INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::At(int index) const -> const MappingType & { return array_[index]; }
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::All() const -> const MappingType * { return array_; }
+
+INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Split(BufferPoolManager *bpm, page_id_t *page_id) -> KeyType {
   int size = GetSize();
   auto new_page_guard = bpm->NewPageGuarded(page_id);
   auto new_page = new_page_guard.AsMut<B_PLUS_TREE_LEAF_PAGE_TYPE>();
   new_page->Init(array_, size / 2, size, GetMaxSize());
+  new_page->SetNextPageId(this->GetNextPageId());
   this->SetNextPageId(*page_id);
   SetSize(size / 2);
   return new_page->KeyAt(0);
@@ -82,9 +90,18 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Find(const KeyType &key, KeyComparator &compara
   int right = GetSize() - 1;
   int flg = 0;
   int mid = -1;
+  int result;
+  if ((result = comparator(key, array_[left].first)) <= 0) {
+    flg = result < 0 ? COMPARE_LESS : COMPARE_EQUAL;
+    return std::make_pair(left, flg);
+  }
+  if ((result = comparator(key, array_[right].first)) >= 0) {
+    flg = result > 0 ? COMPARE_GREATER : COMPARE_EQUAL;
+    return std::make_pair(right, flg);
+  }
   while (left <= right) {
     mid = (left + right) >> 1;
-    int result = comparator(key, array_[mid].first);
+    result = comparator(key, array_[mid].first);
     if (result < 0) {
       right = mid - 1;
       flg = COMPARE_LESS;
@@ -109,7 +126,7 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &val
     array_[0] = MappingType(key, value);
   } else if (flg == COMPARE_EQUAL) {  // Duplicate Key
     return false;
-  } else if (flg == COMPARE_GREATER && index > size) {  // Back Insert
+  } else if (flg == COMPARE_GREATER && index >= size - 1) {  // Back Insert
     array_[++index] = MappingType(key, value);
   } else {
     index = (flg == COMPARE_LESS) ? index : index + 1;
@@ -120,6 +137,28 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &val
   }
   IncreaseSize(1);
   return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::Remove(const KeyType &key, KeyComparator &comparator) {
+  std::pair<int, int> target_pair = Find(key, comparator);
+  int index = target_pair.first;
+  int flg = target_pair.second;
+  if (index == -1 || flg != COMPARE_EQUAL) {  // No target key
+    return;
+  }
+  Remove(index);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::Remove(int index) {
+  int size = GetSize();
+  if (index < size - 1) {
+    for (int i = index; i < size; i++) {
+      array_[i] = array_[i + 1];
+    }
+  }
+  IncreaseSize(-1);
 }
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;

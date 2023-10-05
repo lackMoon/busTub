@@ -49,7 +49,7 @@ class Context {
   page_id_t root_page_id_{INVALID_PAGE_ID};
 
   // Store the write guards of the pages that you're modifying here.
-  std::deque<WritePageGuard> write_set_;
+  std::deque<std::pair<WritePageGuard, int>> write_set_;
 
   // You may want to use this when getting value, but not necessary.
   std::deque<ReadPageGuard> read_set_;
@@ -144,13 +144,19 @@ class BPlusTree {
 
   auto GetIndex(std::pair<int, int> pair) const -> int;
 
-  auto InsertNode(WritePageGuard guard, const KeyType &key, const ValueType &value, Context *ctx) -> bool;
+  auto ReadLookUp(const KeyType &key) -> std::optional<ReadPageGuard>;
+
+  auto WriteLookUp(const KeyType &key) -> std::optional<WritePageGuard>;
 
   auto InsertLeaf(WritePageGuard guard, const KeyType &key, const ValueType &value, Context *ctx) -> bool;
 
   auto InsertInternal(WritePageGuard guard, const KeyType &key, const ValueType &value, Context *ctx) -> bool;
 
-  auto CreateNewRoot(std::pair<KeyType, page_id_t> *array, Context *ctx) -> bool;
+  void RemoveLeaf(WritePageGuard guard, const KeyType &key, Context *ctx);
+
+  void RemoveInternal(WritePageGuard guard, const KeyType &key, Context *ctx);
+
+  auto CreateNewRoot(page_id_t lchild, const KeyType &key, page_id_t rchild, Context *ctx) -> bool;
   // member variable
   std::string index_name_;
   BufferPoolManager *bpm_;

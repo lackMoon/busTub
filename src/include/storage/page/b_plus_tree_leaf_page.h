@@ -45,6 +45,9 @@ static constexpr int INVALID_LEAF_INDEX = -1;
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeLeafPage : public BPlusTreePage {
  public:
+  inline void Copy(const MappingType *array, int start, int end, int dest) {
+    std::copy(array + start, array + end, array_ + dest);
+  }
   // Delete all constructor / destructor to ensure memory safety
   BPlusTreeLeafPage() = delete;
   BPlusTreeLeafPage(const BPlusTreeLeafPage &other) = delete;
@@ -63,6 +66,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
   auto ValueAt(int index) const -> ValueType;
+  auto At(int index) const -> const MappingType &;
+  auto All() const -> const MappingType *;
 
   /**
    * @brief for test only return a string representing all keys in
@@ -94,6 +99,10 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto Find(const KeyType &key, KeyComparator &comparator) const -> std::pair<int, int>;
 
   auto Insert(const KeyType &key, const ValueType &value, KeyComparator &comparator) -> bool;
+
+  void Remove(const KeyType &key, KeyComparator &comparator);
+
+  void Remove(int index);
 
  private:
   page_id_t next_page_id_;
