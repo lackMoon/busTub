@@ -113,7 +113,11 @@ class BPlusTreeInternalPage : public BPlusTreePage {
 
   auto Insert(const KeyType &key, const ValueType &value, KeyComparator &comparator) -> bool;
 
-  void InsertHead(const KeyType &key, const ValueType &value);
+  void Insert(int index, const KeyType &key, const ValueType &value);
+
+  void Merge(B_PLUS_TREE_INTERNAL_PAGE_TYPE *node, const KeyType &key);
+
+  auto Redistribute(B_PLUS_TREE_INTERNAL_PAGE_TYPE *node, const KeyType &parent_key, bool is_predecessor) -> KeyType;
 
   void Remove(const KeyType &key, KeyComparator &comparator);
 

@@ -100,6 +100,12 @@ class BPlusTreeLeafPage : public BPlusTreePage {
 
   auto Insert(const KeyType &key, const ValueType &value, KeyComparator &comparator) -> bool;
 
+  void Insert(int index, const KeyType &key, const ValueType &value);
+
+  void Merge(B_PLUS_TREE_LEAF_PAGE_TYPE *node);
+
+  auto Redistribute(B_PLUS_TREE_LEAF_PAGE_TYPE *node, bool is_predecessor) -> KeyType;
+
   void Remove(const KeyType &key, KeyComparator &comparator);
 
   void Remove(int index);

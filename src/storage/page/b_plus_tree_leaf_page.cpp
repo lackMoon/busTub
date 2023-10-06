@@ -91,14 +91,6 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Find(const KeyType &key, KeyComparator &compara
   int flg = 0;
   int mid = -1;
   int result;
-  if ((result = comparator(key, array_[left].first)) <= 0) {
-    flg = result < 0 ? COMPARE_LESS : COMPARE_EQUAL;
-    return std::make_pair(left, flg);
-  }
-  if ((result = comparator(key, array_[right].first)) >= 0) {
-    flg = result > 0 ? COMPARE_GREATER : COMPARE_EQUAL;
-    return std::make_pair(right, flg);
-  }
   while (left <= right) {
     mid = (left + right) >> 1;
     result = comparator(key, array_[mid].first);
@@ -118,7 +110,6 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Find(const KeyType &key, KeyComparator &compara
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, KeyComparator &comparator) -> bool {
-  int size = GetSize();
   std::pair<int, int> target_pair = Find(key, comparator);
   int index = target_pair.first;
   int flg = target_pair.second;
@@ -126,17 +117,59 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &val
     array_[0] = MappingType(key, value);
   } else if (flg == COMPARE_EQUAL) {  // Duplicate Key
     return false;
-  } else if (flg == COMPARE_GREATER && index >= size - 1) {  // Back Insert
-    array_[++index] = MappingType(key, value);
   } else {
     index = (flg == COMPARE_LESS) ? index : index + 1;
+    Insert(index, key, value);
+  }
+  IncreaseSize(1);
+  return true;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(int index, const KeyType &key, const ValueType &value) {
+  int size = GetSize();
+  if (index >= size) {  // Back Insert
+    array_[index] = MappingType(key, value);
+  } else {
     for (int i = size; i > index; i--) {
       array_[i] = array_[i - 1];
     }
     array_[index] = MappingType(key, value);
   }
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+void B_PLUS_TREE_LEAF_PAGE_TYPE::Merge(B_PLUS_TREE_LEAF_PAGE_TYPE *node) {
+  int size = GetSize();
+  int node_size = node->GetSize();
+  auto array = node->All();
+  Copy(array, 0, node_size, size);
+  SetNextPageId(node->GetNextPageId());
+  IncreaseSize(node_size);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::Redistribute(B_PLUS_TREE_LEAF_PAGE_TYPE *node, bool is_predecessor) -> KeyType {
+  int size = GetSize();
+  int node_size = node->GetSize();
+  KeyType key;
+  ValueType value;
+  KeyType parent_key;
+  if (is_predecessor) {
+    key = node->KeyAt(0);
+    value = node->ValueAt(0);
+    node->Remove(0);
+    Insert(size, key, value);
+    parent_key = node->KeyAt(0);
+  } else {
+    key = node->KeyAt(node_size - 1);
+    value = node->ValueAt(node_size - 1);
+    node->Remove(node_size - 1);
+    Insert(0, key, value);
+    parent_key = KeyAt(0);
+  }
   IncreaseSize(1);
-  return true;
+  return parent_key;
 }
 
 INDEX_TEMPLATE_ARGUMENTS

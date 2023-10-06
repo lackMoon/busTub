@@ -565,18 +565,11 @@ void BPLUSTREE_TYPE::RemoveLeaf(WritePageGuard guard, const KeyType &key, Contex
       auto predecessor_node = predecessor.AsMut<LeafPage>();
       int predecessor_size = predecessor_node->GetSize();
       if (size + predecessor_size < leaf_max_size_) {
-        auto array = leaf_node->All();
-        predecessor_node->Copy(array, 0, size, predecessor_size);
-        predecessor_node->SetNextPageId(leaf_node->GetNextPageId());
-        predecessor_node->IncreaseSize(size);
+        predecessor_node->Merge(leaf_node);
         auto parent_key = parent_node->KeyAt(parent_index);
         RemoveInternal(std::move(parent_page), parent_key, ctx);
       } else {
-        auto key = predecessor_node->KeyAt(predecessor_size - 1);
-        auto value = predecessor_node->ValueAt(predecessor_size - 1);
-        predecessor_node->Remove(predecessor_size - 1);
-        leaf_node->Insert(key, value, comparator_);
-        parent_node->SetKeyAt(parent_index, leaf_node->KeyAt(0));
+        parent_node->SetKeyAt(parent_index, leaf_node->Redistribute(predecessor_node, false));
       }
     } else {
       parent_index = curr_index + 1;
@@ -584,18 +577,11 @@ void BPLUSTREE_TYPE::RemoveLeaf(WritePageGuard guard, const KeyType &key, Contex
       auto successor_node = successor.AsMut<LeafPage>();
       int successor_size = successor_node->GetSize();
       if (size + successor_size < leaf_max_size_) {
-        auto array = successor_node->All();
-        leaf_node->Copy(array, 0, successor_size, size);
-        leaf_node->SetNextPageId(successor_node->GetNextPageId());
-        leaf_node->IncreaseSize(successor_size);
+        leaf_node->Merge(successor_node);
         auto parent_key = parent_node->KeyAt(parent_index);
         RemoveInternal(std::move(parent_page), parent_key, ctx);
       } else {
-        auto key = successor_node->KeyAt(0);
-        auto value = successor_node->ValueAt(0);
-        successor_node->Remove(0);
-        leaf_node->Insert(key, value, comparator_);
-        parent_node->SetKeyAt(parent_index, successor_node->KeyAt(0));
+        parent_node->SetKeyAt(parent_index, leaf_node->Redistribute(successor_node, true));
       }
     }
   }
@@ -627,17 +613,10 @@ void BPLUSTREE_TYPE::RemoveInternal(WritePageGuard guard, const KeyType &key, Co
       auto predecessor_node = predecessor.AsMut<InternalPage>();
       int predecessor_size = predecessor_node->GetSize();
       if (size + predecessor_size <= internal_max_size_) {
-        auto array = internal_node->All();
-        predecessor_node->Copy(array, 0, size, predecessor_size);
-        predecessor_node->SetKeyAt(predecessor_size, parent_key);
-        predecessor_node->IncreaseSize(size);
+        predecessor_node->Merge(internal_node, parent_key);
         RemoveInternal(std::move(parent_page), parent_key, ctx);
       } else {
-        auto key = predecessor_node->KeyAt(predecessor_size - 1);
-        auto value = predecessor_node->ValueAt(predecessor_size - 1);
-        predecessor_node->Remove(predecessor_size - 1);
-        internal_node->InsertHead(parent_key, value);
-        parent_node->SetKeyAt(parent_index, key);
+        parent_node->SetKeyAt(parent_index, internal_node->Redistribute(predecessor_node, parent_key, false));
       }
     } else {
       parent_index = curr_index + 1;
@@ -646,17 +625,10 @@ void BPLUSTREE_TYPE::RemoveInternal(WritePageGuard guard, const KeyType &key, Co
       auto successor_node = successor.AsMut<InternalPage>();
       int successor_size = successor_node->GetSize();
       if (size + successor_size <= internal_max_size_) {
-        auto array = successor_node->All();
-        internal_node->Copy(array, 0, successor_size, size);
-        internal_node->SetKeyAt(size, parent_key);
-        internal_node->IncreaseSize(successor_size);
+        internal_node->Merge(successor_node, parent_key);
         RemoveInternal(std::move(parent_page), parent_key, ctx);
       } else {
-        auto key = successor_node->KeyAt(1);
-        auto value = successor_node->ValueAt(0);
-        successor_node->Remove(0);
-        internal_node->Insert(parent_key, value, comparator_);
-        parent_node->SetKeyAt(parent_index, key);
+        parent_node->SetKeyAt(parent_index, internal_node->Redistribute(successor_node, parent_key, true));
       }
     }
   }
