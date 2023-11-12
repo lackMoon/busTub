@@ -34,7 +34,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(MappingType *array, int start, int end
   SetSize(end - start);
   SetMaxSize(max_size);
   array_[0].second = array[start].second;
-  Copy(array, start + 1, end, 1);
+  std::copy(array + start + 1, array + end, array_ + 1);
 }
 
 /*
@@ -138,7 +138,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Merge(B_PLUS_TREE_INTERNAL_PAGE_TYPE *node,
   int size = GetSize();
   int node_size = node->GetSize();
   auto array = node->All();
-  Copy(array, 0, node_size, size);
+  std::copy(array, array + node_size, array_ + size);
   SetKeyAt(size, key);
   IncreaseSize(node_size);
 }

@@ -67,8 +67,8 @@ void BustubInstance::HandleIndexStatement(Transaction *txn, const IndexStatement
   //
   // You can also create clustered index that directly stores value inside the index by modifying the value type.
 
-  if (col_ids.empty() || col_ids.size() > 2) {
-    throw NotImplementedException("only support creating index with exactly one or two columns");
+  if (col_ids.empty()) {
+    throw ExecutionException("index columns can't be null");
   }
 
   std::unique_lock<std::shared_mutex> l(catalog_lock_);

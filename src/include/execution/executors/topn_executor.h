@@ -12,9 +12,11 @@
 
 #pragma once
 
+#include <cstddef>
+#include <functional>
+#include <map>
 #include <memory>
 #include <utility>
-#include <vector>
 
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
@@ -59,9 +61,35 @@ class TopNExecutor : public AbstractExecutor {
   auto GetNumInHeap() -> size_t;
 
  private:
+  void Insert(Tuple &tuple) {
+    if (top_entries_->count(tuple) != 0) {
+      top_entries_->at(tuple) += 1;
+    } else {
+      top_entries_->insert({tuple, 1});
+    }
+    size_++;
+  }
+
+  auto Top() -> const Tuple & { return top_entries_->begin()->first; }
+
+  void Pop(bool is_front) {
+    auto iter = is_front ? top_entries_->begin() : --top_entries_->end();
+    if (iter->second == 1) {
+      top_entries_->erase(iter);
+    } else {
+      iter->second--;
+    }
+    size_--;
+  }
   /** The TopN plan node to be executed */
   const TopNPlanNode *plan_;
   /** The child executor from which tuples are obtained */
   std::unique_ptr<AbstractExecutor> child_executor_;
+
+  std::function<bool(const Tuple &lvalue, const Tuple &rvalue)> cmp_;
+
+  std::unique_ptr<std::map<Tuple, int, decltype(cmp_)>> top_entries_;
+
+  size_t size_;
 };
 }  // namespace bustub

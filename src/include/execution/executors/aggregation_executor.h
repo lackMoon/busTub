@@ -24,6 +24,7 @@
 #include "execution/expressions/abstract_expression.h"
 #include "execution/plans/aggregation_plan.h"
 #include "storage/table/tuple.h"
+#include "type/type.h"
 #include "type/value_factory.h"
 
 namespace bustub {
@@ -64,6 +65,12 @@ class SimpleAggregationHashTable {
   }
 
   /**
+   * Init a new SimpleAggregationHashTable record.
+   * @param agg_key the key to be inserted
+   */
+  void InitAggregation(const AggregateKey &agg_key) { ht_.insert({agg_key, GenerateInitialAggregateValue()}); }
+
+  /**
    * TODO(Student)
    *
    * Combines the input into the aggregation result.
@@ -72,12 +79,32 @@ class SimpleAggregationHashTable {
    */
   void CombineAggregateValues(AggregateValue *result, const AggregateValue &input) {
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
+      auto &lvalue = result->aggregates_[i];
+      auto &rvalue = input.aggregates_[i];
       switch (agg_types_[i]) {
         case AggregationType::CountStarAggregate:
+          lvalue = lvalue.Add(rvalue);
+          break;
         case AggregationType::CountAggregate:
+          if (!rvalue.IsNull()) {
+            auto value = ValueFactory::GetIntegerValue(1);
+            lvalue = lvalue.IsNull() ? value : lvalue.Add(value);
+          }
+          break;
         case AggregationType::SumAggregate:
+          if (!rvalue.IsNull()) {
+            lvalue = lvalue.IsNull() ? rvalue : lvalue.Add(rvalue);
+          }
+          break;
         case AggregationType::MinAggregate:
+          if (!rvalue.IsNull()) {
+            lvalue = lvalue.IsNull() ? rvalue : lvalue.Min(rvalue);
+          }
+          break;
         case AggregationType::MaxAggregate:
+          if (!rvalue.IsNull()) {
+            lvalue = lvalue.IsNull() ? rvalue : lvalue.Max(rvalue);
+          }
           break;
       }
     }
@@ -90,7 +117,7 @@ class SimpleAggregationHashTable {
    */
   void InsertCombine(const AggregateKey &agg_key, const AggregateValue &agg_val) {
     if (ht_.count(agg_key) == 0) {
-      ht_.insert({agg_key, GenerateInitialAggregateValue()});
+      InitAggregation(agg_key);
     }
     CombineAggregateValues(&ht_[agg_key], agg_val);
   }
@@ -99,6 +126,11 @@ class SimpleAggregationHashTable {
    * Clear the hash table
    */
   void Clear() { ht_.clear(); }
+
+  /**
+   * Returns true if the hash table is empty.
+   */
+  auto Empty() -> bool { return ht_.empty(); }
 
   /** An iterator over the aggregation hash table */
   class Iterator {
@@ -203,9 +235,9 @@ class AggregationExecutor : public AbstractExecutor {
   std::unique_ptr<AbstractExecutor> child_executor_;
 
   /** Simple aggregation hash table */
-  // TODO(Student): Uncomment SimpleAggregationHashTable aht_;
+  SimpleAggregationHashTable aht_;
 
   /** Simple aggregation hash table iterator */
-  // TODO(Student): Uncomment SimpleAggregationHashTable::Iterator aht_iterator_;
+  SimpleAggregationHashTable::Iterator aht_iterator_;
 };
 }  // namespace bustub

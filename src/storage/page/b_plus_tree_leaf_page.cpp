@@ -39,7 +39,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(MappingType *array, int start, int end, in
   SetPageType(IndexPageType::LEAF_PAGE);
   SetSize(end - start);
   SetMaxSize(max_size);
-  Copy(array, start, end, 0);
+  std::copy(array + start, array + end, array_);
   next_page_id_ = INVALID_PAGE_ID;
 }
 
@@ -143,7 +143,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::Merge(B_PLUS_TREE_LEAF_PAGE_TYPE *node) {
   int size = GetSize();
   int node_size = node->GetSize();
   auto array = node->All();
-  Copy(array, 0, node_size, size);
+  std::copy(array, array + node_size, array_ + size);
   SetNextPageId(node->GetNextPageId());
   IncreaseSize(node_size);
 }

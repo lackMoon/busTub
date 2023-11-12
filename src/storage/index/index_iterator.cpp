@@ -26,6 +26,12 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::~IndexIterator() { guard_ = std::nullopt; }
 
 INDEX_TEMPLATE_ARGUMENTS
+INDEXITERATOR_TYPE::IndexIterator(IndexIterator &&that) noexcept
+    : guard_(std::move(that.guard_)), bpm_(that.bpm_), page_id_(that.page_id_), index_(that.index_) {
+  that.guard_ = std::nullopt;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::IsEnd() -> bool {
   if (!guard_.has_value()) {
     return true;

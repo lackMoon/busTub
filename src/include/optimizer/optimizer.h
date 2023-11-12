@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <tuple>
@@ -8,9 +10,13 @@
 #include <vector>
 
 #include "catalog/catalog.h"
+#include "catalog/schema.h"
 #include "concurrency/transaction.h"
 #include "execution/expressions/abstract_expression.h"
+#include "execution/expressions/column_value_expression.h"
+#include "execution/expressions/logic_expression.h"
 #include "execution/plans/abstract_plan.h"
+#include "execution/plans/aggregation_plan.h"
 
 namespace bustub {
 
@@ -34,12 +40,23 @@ class Optimizer {
    */
   auto OptimizeMergeProjection(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
+  auto OptimizeMergeSubProjection(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  auto OptimizePruningColumnAgg(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
   /**
    * @brief merge filter condition into nested loop join.
    * In planner, we plan cross join + filter with cross product (done with nested loop join) and a filter plan node. We
    * can merge the filter condition into nested loop join to achieve better efficiency.
    */
   auto OptimizeMergeFilterNLJ(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  auto OptimizeMergeDummyNLJ(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  /**
+   * @brief push down constant filter condition into filter plan below nested loop join.
+   */
+  auto OptimizePushDownFilterNLJ(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   /**
    * @brief optimize nested loop join into hash join.
@@ -59,9 +76,19 @@ class Optimizer {
   auto OptimizeEliminateTrueFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   /**
+   * @brief eliminate always false filter
+   */
+  auto OptimizeEliminateFalseFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  auto OptimizeMergeFilterIndexScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  /**
    * @brief merge filter into filter_predicate of seq scan plan node
    */
   auto OptimizeMergeFilterScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+
+  /** @brief extract filter keys from the predict conditions */
+  auto ExtractFilterKey(const AbstractExpressionRef &expr, std::unordered_map<uint32_t, bool> &filter_column_ids)
+      -> bool;
 
   /**
    * @brief rewrite expression to be used in nested loop joins. e.g., if we have `SELECT * FROM a, b WHERE a.x = b.y`,
@@ -75,9 +102,36 @@ class Optimizer {
   auto RewriteExpressionForJoin(const AbstractExpressionRef &expr, size_t left_column_cnt, size_t right_column_cnt)
       -> AbstractExpressionRef;
 
+  auto RewriteExpressionForAgg(const AbstractExpressionRef &expr, std::map<uint32_t, uint32_t> idx_map)
+      -> AbstractExpressionRef;
+
   /** @brief check if the predicate is true::boolean */
   auto IsPredicateTrue(const AbstractExpressionRef &expr) -> bool;
 
+  auto GetBoolFromPredicate(const AbstractExpressionRef &expr) -> bool;
+
+  void ReBuildFilterPredicate(const AbstractExpressionRef &expr, std::vector<AbstractExpressionRef> &predicates,
+                              LogicType type, size_t left_column_cnt, size_t right_column_cnt);
+
+  auto BuildFilterExpression(AbstractExpressionRef &left_expr, const AbstractExpressionRef &right_expr, LogicType type)
+      -> AbstractExpressionRef;
+
+  auto GetColumnIdx(const ColumnValueExpression *column_expr, size_t left_column_cnt, size_t right_column_cnt)
+      -> uint32_t;
+
+  auto GetColumnTdx(const ColumnValueExpression *column_expr, size_t left_column_cnt, size_t right_column_cnt)
+      -> uint32_t;
+
+  void ExtractProjectionIdx(const AbstractExpressionRef &expr, std::map<uint32_t, uint32_t> &idx_map);
+  /** @brief extract hash join keys from the predict conditions, check if expr is equal condition */
+  auto ExtractJoinKey(const AbstractExpressionRef &expr, std::vector<AbstractExpressionRef> &left_key_expressions,
+                      std::vector<AbstractExpressionRef> &right_key_expressions, size_t left_column_cnt,
+                      size_t right_column_cnt) -> bool;
+
+  auto AggItemExist(std::vector<AggregationType> &agg_types, std::vector<AbstractExpressionRef> &aggregates,
+                    std::pair<AggregationType, AbstractExpressionRef> &agg_pair) -> int;
+
+  auto Equal(AbstractExpressionRef &left_expr, AbstractExpressionRef &right_expr) -> bool;
   /**
    * @brief optimize order by as index scan if there's an index on a table
    */

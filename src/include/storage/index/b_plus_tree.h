@@ -150,7 +150,7 @@ class BPlusTree {
 
   auto InsertLeaf(WritePageGuard guard, const KeyType &key, const ValueType &value, Context *ctx) -> bool;
 
-  auto InsertInternal(WritePageGuard guard, const KeyType &key, const ValueType &value, Context *ctx) -> bool;
+  auto InsertInternal(WritePageGuard guard, const KeyType &key, const page_id_t &value, Context *ctx) -> bool;
 
   void RemoveLeaf(WritePageGuard guard, const KeyType &key, Context *ctx);
 

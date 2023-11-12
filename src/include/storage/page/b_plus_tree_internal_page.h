@@ -38,9 +38,6 @@ namespace bustub {
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeInternalPage : public BPlusTreePage {
  public:
-  inline void Copy(const MappingType *array, int start, int end, int dest) {
-    std::copy(array + start, array + end, array_ + dest);
-  }
   // Deleted to disallow initialization
   BPlusTreeInternalPage() = delete;
   BPlusTreeInternalPage(const BPlusTreeInternalPage &other) = delete;

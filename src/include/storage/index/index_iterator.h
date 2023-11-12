@@ -30,6 +30,7 @@ class IndexIterator {
   // you may define your own constructor based on your member variables
   explicit IndexIterator(std::optional<ReadPageGuard> guard, BufferPoolManager *bpm, int index = 0);
   ~IndexIterator();  // NOLINT
+  IndexIterator(IndexIterator &&that) noexcept;
 
   auto IsEnd() -> bool;
 

@@ -27,7 +27,7 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
       leaf_max_size_(leaf_max_size),
       internal_max_size_(internal_max_size),
       header_page_id_(header_page_id) {
-  auto guard = bpm_->FetchPageWrite(header_page_id_);
+  auto guard = bpm_->FetchPageBasic(header_page_id_);
   auto header_page = guard.AsMut<BPlusTreeHeaderPage>();
   header_page->root_page_id_ = INVALID_PAGE_ID;
 }
@@ -210,13 +210,17 @@ auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
+  if (IsEmpty()) {
+    return INDEXITERATOR_TYPE(std::nullopt, bpm_);
+  }
   int index = 0;
   std::optional<ReadPageGuard> page_guard = ReadLookUp(key);
   if (page_guard.has_value()) {
     auto page = page_guard->As<LeafPage>();
     auto target_pair = page->Find(key, comparator_);
-    if (target_pair.second == COMPARE_EQUAL) {
-      index = target_pair.first;
+    index = target_pair.first;
+    if (target_pair.second == COMPARE_GREATER) {
+      index++;
     }
   }
   return INDEXITERATOR_TYPE(std::move(page_guard), bpm_, index);
@@ -518,16 +522,16 @@ auto BPLUSTREE_TYPE::InsertLeaf(WritePageGuard guard, const KeyType &key, const 
     }
     auto parent_guard = std::move(ctx->write_set_.back().first);
     ctx->write_set_.pop_back();
-    return InsertInternal(std::move(parent_guard), new_key, RID(new_page_id, 0), ctx);
+    return InsertInternal(std::move(parent_guard), new_key, new_page_id, ctx);
   }
   return true;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertInternal(WritePageGuard guard, const KeyType &key, const ValueType &value, Context *ctx)
+auto BPLUSTREE_TYPE::InsertInternal(WritePageGuard guard, const KeyType &key, const page_id_t &value, Context *ctx)
     -> bool {
   auto internal_page = guard.AsMut<InternalPage>();
-  page_id_t child_id = value.GetPageId();
+  page_id_t child_id = value;
   if (!internal_page->Insert(key, child_id, comparator_)) {
     return false;
   }
@@ -540,7 +544,7 @@ auto BPLUSTREE_TYPE::InsertInternal(WritePageGuard guard, const KeyType &key, co
     }
     auto parent_guard = std::move(ctx->write_set_.back().first);
     ctx->write_set_.pop_back();
-    return InsertInternal(std::move(parent_guard), new_key, RID(new_page_id, 0), ctx);
+    return InsertInternal(std::move(parent_guard), new_key, new_page_id, ctx);
   }
   return true;
 }

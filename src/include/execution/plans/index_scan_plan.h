@@ -30,8 +30,8 @@ class IndexScanPlanNode : public AbstractPlanNode {
    * @param output The output format of this scan plan node
    * @param table_oid The identifier of table to be scanned
    */
-  IndexScanPlanNode(SchemaRef output, index_oid_t index_oid)
-      : AbstractPlanNode(std::move(output), {}), index_oid_(index_oid) {}
+  IndexScanPlanNode(SchemaRef output, index_oid_t index_oid, AbstractExpressionRef predicate = nullptr)
+      : AbstractPlanNode(std::move(output), {}), index_oid_(index_oid), predicate_(std::move(predicate)) {}
 
   auto GetType() const -> PlanType override { return PlanType::IndexScan; }
 
@@ -44,11 +44,23 @@ class IndexScanPlanNode : public AbstractPlanNode {
   index_oid_t index_oid_;
 
   // Add anything you want here for index lookup
+  AbstractExpressionRef predicate_;
 
  protected:
   auto PlanNodeToString() const -> std::string override {
+    if (predicate_) {
+      return fmt::format("IndexScan {{ index_oid={}, filter={} }}", index_oid_, predicate_);
+    }
     return fmt::format("IndexScan {{ index_oid={} }}", index_oid_);
   }
+};
+
+struct IndexKeyRange {
+  Value from_;
+
+  Value to_;
+
+  bool is_valid_;
 };
 
 }  // namespace bustub
