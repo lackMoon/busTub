@@ -29,7 +29,11 @@
 
 namespace bustub {
 IndexScanExecutor::IndexScanExecutor(ExecutorContext *exec_ctx, const IndexScanPlanNode *plan)
-    : AbstractExecutor(exec_ctx), plan_(plan) {}
+    : AbstractExecutor(exec_ctx),
+      plan_(plan),
+      txn_(exec_ctx->GetTransaction()),
+      lock_mgr_(exec_ctx_->GetLockManager()),
+      is_deleted_(exec_ctx->IsDelete()) {}
 
 void IndexScanExecutor::ExtractKeyRangeFromPredict(const AbstractExpressionRef &predicate,
                                                    std::unordered_map<uint32_t, IndexKeyRange> &key_range) {
@@ -88,7 +92,9 @@ void IndexScanExecutor::Init() {
   auto index_info = cata_log->GetIndex(plan_->index_oid_);
   index_ = dynamic_cast<BPlusTreeIndexForTwoIntegerColumn *>(index_info->index_.get());
   auto index_schema = index_->GetKeySchema();
-  table_info_ = cata_log->GetTable(index_info->table_name_);
+  auto oid = cata_log->GetTable(index_info->table_name_)->oid_;
+  TryLockTable(oid);
+  table_info_ = cata_log->GetTable(oid);
   if (plan_->predicate_) {
     std::unordered_map<uint32_t, IndexKeyRange> key_range;
     for (auto &idx : index_->GetKeyAttrs()) {
@@ -124,7 +130,9 @@ void IndexScanExecutor::Init() {
 
 auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   while (true) {
+    auto oid = table_info_->oid_;
     if ((*begin_iterator_) == (*end_iterator_)) {
+      TryUnLockTable(oid);
       return false;
     }
     if (plan_->predicate_) {
@@ -137,12 +145,15 @@ auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       }
     }
     *rid = (*(*begin_iterator_)).second;
+    TryLockTuple(oid, *rid);
     auto tuple_info = table_info_->table_->GetTuple(*rid);
     if (tuple_info.first.is_deleted_) {
+      TryUnLockTuple(oid, *rid, true);
       ++(*begin_iterator_);
       continue;
     }
     *tuple = tuple_info.second;
+    TryUnLockTuple(oid, *rid);
     ++(*begin_iterator_);
     return true;
   }

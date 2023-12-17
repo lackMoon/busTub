@@ -16,6 +16,8 @@
 #include <utility>
 #include <vector>
 
+#include "concurrency/lock_manager.h"
+#include "concurrency/transaction.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/delete_plan.h"
@@ -66,6 +68,8 @@ class DeleteExecutor : public AbstractExecutor {
   const TableInfo *table_info_;
 
   std::vector<IndexInfo *> index_set_;
+
+  Transaction *txn_;
 
   bool is_done_ = false;
 };

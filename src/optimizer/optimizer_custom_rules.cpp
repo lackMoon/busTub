@@ -14,12 +14,12 @@ auto Optimizer::OptimizeCustom(const AbstractPlanNodeRef &plan) -> AbstractPlanN
   p = OptimizeEliminateFalseFilter(p);
   p = OptimizeMergeFilterNLJ(p);
   p = OptimizeMergeDummyNLJ(p);
-  p = OptimizePushDownFilterNLJ(p);
+  p = OptimizePushDownPredicateNLJ(p);
   p = OptimizeNLJAsHashJoin(p);
   p = OptimizeOrderByAsIndexScan(p);
   p = OptimizeSortLimitAsTopN(p);
   p = OptimizePruningColumnAgg(p);
-  p = OptimizeMergeFilterIndexScan(p);
+  p = OptimizePushDownPredicateScan(p);
   return p;
 }
 

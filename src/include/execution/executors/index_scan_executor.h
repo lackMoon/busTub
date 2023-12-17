@@ -36,6 +36,8 @@ namespace bustub {
  */
 
 class IndexScanExecutor : public AbstractExecutor {
+  using LockMode = LockManager::LockMode;
+
  public:
   /**
    * Creates a new index scan executor.
@@ -61,6 +63,65 @@ class IndexScanExecutor : public AbstractExecutor {
     }
     return Tuple{values, key_schema};
   }
+
+  auto IsNeedLock(table_oid_t oid) -> bool {
+    if (txn_->IsTableExclusiveLocked(oid) || txn_->IsTableIntentionExclusiveLocked(oid)) {
+      return false;
+    }
+    return is_deleted_ ? true : txn_->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED;
+  }
+
+  auto IsNeedLock(table_oid_t oid, RID &rid) -> bool {
+    if (txn_->IsTableExclusiveLocked(oid) || txn_->IsTableSharedLocked(oid) || txn_->IsRowExclusiveLocked(oid, rid)) {
+      return false;
+    }
+    return is_deleted_ ? true : txn_->GetIsolationLevel() != IsolationLevel::READ_UNCOMMITTED;
+  }
+
+  void TryLockTable(table_oid_t oid) {
+    if (IsNeedLock(oid)) {
+      LockMode lock_mode = is_deleted_ ? LockMode::INTENTION_EXCLUSIVE : LockMode::INTENTION_SHARED;
+      try {
+        if (!lock_mgr_->LockTable(txn_, lock_mode, oid)) {
+          throw ExecutionException(fmt::format("Failed to acquire the {} lock of {} table", lock_mode,
+                                               exec_ctx_->GetCatalog()->GetTable(oid)->name_));
+        }
+      } catch (TransactionAbortException e) {
+        throw ExecutionException(fmt::format("Exception happened when acquire the {} lock of {} table : {}", lock_mode,
+                                             exec_ctx_->GetCatalog()->GetTable(oid)->name_, e.GetInfo()));
+      }
+    }
+  }
+
+  void TryUnLockTable(table_oid_t oid) {
+    if (IsNeedLock(oid) && (!is_deleted_ && txn_->GetIsolationLevel() == IsolationLevel::READ_COMMITTED)) {
+      lock_mgr_->UnlockTable(txn_, oid);
+    }
+  }
+
+  void TryLockTuple(table_oid_t oid, RID &rid) {
+    if (IsNeedLock(oid, rid)) {
+      LockMode lock_mode = is_deleted_ ? LockMode::EXCLUSIVE : LockMode::SHARED;
+      try {
+        if (!lock_mgr_->LockRow(txn_, lock_mode, oid, rid)) {
+          throw ExecutionException(fmt::format("Failed to acquire the {} lock of tuple in {} table", lock_mode,
+                                               exec_ctx_->GetCatalog()->GetTable(oid)->name_));
+        }
+      } catch (TransactionAbortException e) {
+        throw ExecutionException(fmt::format("Exception happened when acquire the {} lock of tuple in {} table : {}",
+                                             lock_mode, exec_ctx_->GetCatalog()->GetTable(oid)->name_, e.GetInfo()));
+      }
+    }
+  }
+
+  void TryUnLockTuple(table_oid_t oid, RID &rid, bool force = false) {
+    if (IsNeedLock(oid, rid)) {
+      if (force || txn_->GetIsolationLevel() == IsolationLevel::READ_COMMITTED) {
+        lock_mgr_->UnlockRow(txn_, oid, rid, force);
+      }
+    }
+  }
+
   /** The index scan plan node to be executed. */
   const IndexScanPlanNode *plan_;
 
@@ -71,5 +132,11 @@ class IndexScanExecutor : public AbstractExecutor {
   std::unique_ptr<BPlusTreeIndexIteratorForTwoIntegerColumn> begin_iterator_;
 
   std::unique_ptr<BPlusTreeIndexIteratorForTwoIntegerColumn> end_iterator_;
+
+  Transaction *txn_;
+
+  LockManager *lock_mgr_;
+
+  bool is_deleted_;
 };
 }  // namespace bustub

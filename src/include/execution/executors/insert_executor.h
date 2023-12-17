@@ -19,6 +19,7 @@
 
 #include "catalog/catalog.h"
 #include "catalog/schema.h"
+#include "concurrency/lock_manager.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/insert_plan.h"
@@ -32,6 +33,8 @@ namespace bustub {
  * Inserted values are always pulled from a child executor.
  */
 class InsertExecutor : public AbstractExecutor {
+  using LockMode = LockManager::LockMode;
+
  public:
   /**
    * Construct a new InsertExecutor instance.
@@ -68,7 +71,13 @@ class InsertExecutor : public AbstractExecutor {
 
   /** Metadata identifying the table that should be inserted */
   TableInfo *table_info_;
+
   std::vector<IndexInfo *> index_set_;
+
+  Transaction *txn_;
+
+  LockManager *lock_mgr_;
+
   bool is_done_ = false;
 };
 

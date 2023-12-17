@@ -144,10 +144,10 @@ auto Optimizer::ExtractFilterKey(const AbstractExpressionRef &expr,
   return false;
 }
 
-auto Optimizer::OptimizeMergeFilterIndexScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizePushDownPredicateScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : plan->GetChildren()) {
-    children.emplace_back(OptimizeMergeFilterScan(child));
+    children.emplace_back(OptimizePushDownPredicateScan(child));
   }
 
   auto optimized_plan = plan->CloneWithChildren(std::move(children));
@@ -369,7 +369,7 @@ auto Optimizer::OptimizeMergeDummyNLJ(const AbstractPlanNodeRef &plan) -> Abstra
   return optimized_plan;
 }
 
-auto Optimizer::OptimizePushDownFilterNLJ(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
+auto Optimizer::OptimizePushDownPredicateNLJ(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef {
   AbstractPlanNodeRef optimized_plan = plan;
   if (optimized_plan->GetType() == PlanType::NestedLoopJoin) {
     const auto &nlj_plan = dynamic_cast<const NestedLoopJoinPlanNode &>(*optimized_plan);
@@ -416,7 +416,7 @@ auto Optimizer::OptimizePushDownFilterNLJ(const AbstractPlanNodeRef &plan) -> Ab
   }
   std::vector<AbstractPlanNodeRef> children;
   for (const auto &child : optimized_plan->GetChildren()) {
-    children.emplace_back(OptimizePushDownFilterNLJ(child));
+    children.emplace_back(OptimizePushDownPredicateNLJ(child));
   }
   optimized_plan = optimized_plan->CloneWithChildren(std::move(children));
   return optimized_plan;

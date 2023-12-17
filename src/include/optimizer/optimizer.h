@@ -56,7 +56,7 @@ class Optimizer {
   /**
    * @brief push down constant filter condition into filter plan below nested loop join.
    */
-  auto OptimizePushDownFilterNLJ(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizePushDownPredicateNLJ(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
   /**
    * @brief optimize nested loop join into hash join.
@@ -80,7 +80,7 @@ class Optimizer {
    */
   auto OptimizeEliminateFalseFilter(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
 
-  auto OptimizeMergeFilterIndexScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  auto OptimizePushDownPredicateScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
   /**
    * @brief merge filter into filter_predicate of seq scan plan node
    */
