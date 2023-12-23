@@ -199,11 +199,6 @@ void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {
   waits_graph_.at(t1).emplace(t2);
 }
 
-void LockManager::AddEdges(txn_id_t source_txn, std::vector<txn_id_t> &granted_set) {
-  for (auto txn_id : granted_set) {
-    waits_graph_.at(source_txn).emplace(txn_id);
-  }
-}
 void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {
   auto &wait_set = waits_graph_.at(t1);
   if (wait_set.count(t2) != 0) {
@@ -313,7 +308,9 @@ void LockManager::BuildGraph(LockRequestQueue *lock_request_queue) {
       granted_txns.push_back(request->txn_id_);
     } else {
       waiting_txns_.insert({txn_id, waiting_txns_.at(-1)});
-      AddEdges(txn_id, granted_txns);
+      for (auto neighbor_txn : granted_txns) {
+        waits_graph_.at(txn_id).emplace(neighbor_txn);
+      }
     }
   }
 }

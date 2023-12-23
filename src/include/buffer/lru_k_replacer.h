@@ -12,17 +12,21 @@
 
 #pragma once
 
+#include <atomic>
 #include <climits>
 #include <cstddef>
 #include <list>
+#include <map>
 #include <memory>
 #include <mutex>  // NOLINT
+#include <set>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "common/config.h"
 #include "common/macros.h"
+#include "type/boolean_type.h"
 
 namespace bustub {
 
@@ -34,8 +38,21 @@ class LRUKNode {
   // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
   std::list<size_t> history_;
   size_t k_{0};
-  frame_id_t frame_id_{-1};
-  bool is_evictable_{false};
+  frame_id_t fid_;
+  std::mutex latch_;
+};
+
+class LRUKQueue {
+ public:
+  std::list<frame_id_t> less_k_queue_;
+
+  std::list<std::pair<frame_id_t, size_t>> k_queue_;
+
+  std::unordered_map<frame_id_t, std::list<frame_id_t>::iterator> on_less_k_queue_;
+
+  std::unordered_map<frame_id_t, std::list<std::pair<frame_id_t, size_t>>::iterator> on_k_queue_;
+
+  std::mutex latch_;
 };
 
 /**
@@ -147,20 +164,20 @@ class LRUKReplacer {
   auto Size() -> size_t;
 
  private:
-  std::unordered_map<frame_id_t, node_id_t> node_store_;
-  std::unordered_map<frame_id_t, size_t> k_queue_;
-  std::unordered_map<frame_id_t, size_t> less_k_queue_;
-  size_t curr_size_{0};
+  std::unordered_map<frame_id_t, std::shared_ptr<LRUKNode>> node_store_;
+
+  bool *evictable_map_;
+
+  std::shared_ptr<LRUKQueue> queue_;
+
+  std::atomic_size_t curr_size_{0};
   size_t replacer_size_;
   size_t k_;
-  size_t current_timestamp_{0};
-  LRUKNode *nodes_;
-  std::list<node_id_t> free_list_;
+  std::size_t current_timestamp_{0};
   std::mutex latch_;
 
-  void EnQueue(frame_id_t frame_id, const LRUKNode &node);
+  void EnQueue(std::shared_ptr<LRUKNode> &node);
   void DeQueue(frame_id_t frame_id);
-  void RemoveNode(frame_id_t frame_id);
 };
 
 }  // namespace bustub

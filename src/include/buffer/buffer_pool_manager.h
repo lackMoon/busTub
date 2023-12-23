@@ -12,10 +12,16 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cstring>
+#include <deque>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
+#include <optional>
+#include <shared_mutex>
 #include <unordered_map>
+#include <utility>
 
 #include "buffer/lru_k_replacer.h"
 #include "common/config.h"
@@ -25,6 +31,185 @@
 #include "storage/page/page_guard.h"
 
 namespace bustub {
+
+class DiskRequest {
+ public:
+  DiskRequest(bool is_write, char *data, page_id_t page_id, std::promise<bool> call_back)
+      : is_write_(is_write), page_id_(page_id), callback_(std::move(call_back)) {
+    if (is_write_) {
+      data_ = new char[BUSTUB_PAGE_SIZE];
+      memmove(data_, data, BUSTUB_PAGE_SIZE);
+    } else {
+      data_ = data;
+    }
+  }
+
+  ~DiskRequest() {
+    if (data_ != nullptr && is_write_) {
+      memset(data_, 0, BUSTUB_PAGE_SIZE);
+      delete[] data_;
+      data_ = nullptr;
+    }
+  }
+
+  DiskRequest(DiskRequest &&request) noexcept {
+    is_write_ = request.is_write_;
+    page_id_ = request.page_id_;
+    callback_ = std::move(request.callback_);
+    if (is_write_) {
+      memmove(data_, request.data_, BUSTUB_PAGE_SIZE);
+      memset(request.data_, 0, BUSTUB_PAGE_SIZE);
+      delete[] request.data_;
+      request.data_ = nullptr;
+    } else {
+      data_ = request.data_;
+    }
+  }
+  /** Flag indicating whether the request is a write or a read. */
+  bool is_write_;
+
+  /**
+   *  Pointer to the start of the memory location where a page is either:
+   *   1. being read into from disk (on a read).
+   *   2. being written out to disk (on a write).
+   */
+  char *data_;
+
+  /** ID of the page being read from / written to disk. */
+  page_id_t page_id_;
+
+  /** Callback used to signal to the request issuer when the request has been completed. */
+  std::promise<bool> callback_;
+};
+
+class RequestChannel {
+ public:
+  RequestChannel() { on_queue_.reserve(1024); }
+  ~RequestChannel() = default;
+
+  /**
+   * @brief Inserts an element into a shared queue.
+   *
+   * @param element The element to be inserted.
+   */
+  void Put(std::optional<std::unique_ptr<DiskRequest>> request) {
+    std::unique_lock<std::mutex> lk(m_);
+    q_.push_front(std::move(request));
+    auto iter = q_.begin();
+    auto &r = *iter;
+    if (r.has_value()) {
+      on_queue_.insert_or_assign(r.value()->page_id_, iter);
+    }
+    lk.unlock();
+    cv_.notify_all();
+  }
+
+  /**
+   * @brief Gets an element from the shared queue. If the queue is empty, blocks until an element is available.
+   */
+  auto Get() -> std::optional<std::unique_ptr<DiskRequest>> {
+    std::unique_lock<std::mutex> lk(m_);
+    cv_.wait(lk, [&]() { return !q_.empty(); });
+    auto r = std::move(q_.back());
+    q_.pop_back();
+    if (r.has_value()) {
+      on_queue_.erase(r.value()->page_id_);
+    }
+    return r;
+  }
+
+  auto Contains(std::unique_ptr<DiskRequest> &request) -> bool {
+    std::unique_lock<std::mutex> lk(m_);
+    auto page_id = request->page_id_;
+    if (on_queue_.count(page_id) != 0) {
+      auto iter = on_queue_.at(page_id);
+      auto &write_request = (*iter).value();
+      memcpy(request->data_, write_request->data_, BUSTUB_PAGE_SIZE);
+      return true;
+    }
+    return false;
+  }
+
+ private:
+  std::mutex m_;
+  std::condition_variable cv_;
+  std::deque<std::optional<std::unique_ptr<DiskRequest>>> q_;
+  std::unordered_map<page_id_t, std::deque<std::optional<std::unique_ptr<DiskRequest>>>::iterator> on_queue_;
+};
+
+/**
+ * @brief The DiskScheduler schedules disk read and write operations.
+ *
+ * A request is scheduled by calling DiskScheduler::Schedule() with an appropriate DiskRequest object. The scheduler
+ * maintains a background worker thread that processes the scheduled requests using the disk manager. The background
+ * thread is created in the DiskScheduler constructor and joined in its destructor.
+ */
+class DiskScheduler {
+ public:
+  explicit DiskScheduler(DiskManager *disk_manager) : disk_manager_(disk_manager) {
+    // Spawn the background thread
+    background_thread_.emplace([&] { StartWorkerThread(); });
+  }
+  ~DiskScheduler() {
+    request_queue_.Put(std::nullopt);
+    if (background_thread_.has_value()) {
+      background_thread_->join();
+    }
+  }
+
+  /**
+   *
+   * @brief Schedules a request for the DiskManager to execute.
+   *
+   * @param r The request to be scheduled.
+   */
+  void Schedule(std::unique_ptr<DiskRequest> r) {
+    if (!r->is_write_) {
+      if (!request_queue_.Contains(r)) {
+        disk_manager_->ReadPage(r->page_id_, r->data_);
+      }
+      r->callback_.set_value(true);
+    } else {
+      r->callback_.set_value(true);
+      request_queue_.Put(std::move(r));
+    }
+  }
+
+  /**
+   *
+   * @brief Background worker thread function that processes scheduled requests.
+   *
+   * The background thread needs to process requests while the DiskScheduler exists, i.e., this function should not
+   * return until ~DiskScheduler() is called. At that point you need to make sure that the function does return.
+   */
+  void StartWorkerThread() {
+    auto r = request_queue_.Get();
+    while (r != std::nullopt) {
+      auto &request = r.value();
+      disk_manager_->WritePage(request->page_id_, request->data_);
+      r = request_queue_.Get();
+    }
+  }
+
+  using DiskSchedulerPromise = std::promise<bool>;
+
+  /**
+   * @brief Create a Promise object. If you want to implement your own version of promise, you can change this function
+   * so that our test cases can use your promise implementation.
+   *
+   * @return std::promise<bool>
+   */
+  auto CreatePromise() -> DiskSchedulerPromise { return {}; };
+
+ private:
+  /** Pointer to the disk manager. */
+  DiskManager *disk_manager_;
+  /** A shared queue to concurrently schedule and process requests. When the DiskScheduler's destructor is called,
+   * `std::nullopt` is put into the queue to signal to the background thread to stop execution. */
+  RequestChannel request_queue_;
+  /** The background thread responsible for issuing scheduled requests to the disk manager. */
+  std::optional<std::thread> background_thread_;
+};
 
 /**
  * BufferPoolManager reads disk pages to and from its internal buffer pool.
@@ -180,8 +365,12 @@ class BufferPoolManager {
 
   /** Array of buffer pool pages. */
   Page *pages_;
+
   /** Pointer to the disk manager. */
   DiskManager *disk_manager_;
+
+  /** Pointer to the disk sheduler. */
+  std::unique_ptr<DiskScheduler> disk_scheduler_;
   /** Pointer to the log manager. Please ignore this for P1. */
   LogManager *log_manager_ __attribute__((__unused__));
   /** Page table for keeping track of buffer pool pages. */
@@ -191,7 +380,7 @@ class BufferPoolManager {
   /** List of free frames that don't have any pages on them. */
   std::list<frame_id_t> free_list_;
   /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
-  std::mutex latch_;
+  std::shared_mutex latch_;
 
   /**
    * @brief Allocate a page on disk. Caller should acquire the latch before calling this function.
@@ -207,8 +396,8 @@ class BufferPoolManager {
     // This is a no-nop right now without a more complex data structure to track deallocated pages
   }
 
-  auto GetPage(page_id_t page_id, frame_id_t *frame_id) -> Page *;
-  void AccessPage(Page *page, frame_id_t frame_id);
-  auto CreatePage(page_id_t page_id) -> Page *;
+  void AccessPage(Page *page, frame_id_t frame_id, AccessType access_type);
+
+  auto CreatePage(page_id_t page_id, AccessType access_type) -> Page *;
 };
 }  // namespace bustub

@@ -649,8 +649,6 @@ class LockManager {
     GrantNewLocksIfPossible(lock_request_queue);
   }
 
-  auto AddEdges(txn_id_t source_txn, std::vector<txn_id_t> &granted_set) -> void;
-
   auto BuildGraph(LockRequestQueue *lock_request_queue) -> void;
 
   auto GetStarterNode(txn_id_t *start) -> bool;
