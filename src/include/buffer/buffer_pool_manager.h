@@ -19,6 +19,7 @@
 #include <memory>
 #include <mutex>  // NOLINT
 #include <optional>
+#include <queue>
 #include <shared_mutex>
 #include <unordered_map>
 #include <utility>
@@ -84,8 +85,14 @@ class DiskRequest {
 
 class RequestChannel {
  public:
-  RequestChannel() { on_queue_.reserve(1024); }
-  ~RequestChannel() = default;
+  RequestChannel() { cached_.reserve(1024); }
+  ~RequestChannel() {
+    for (auto item : cached_) {
+      auto data = item.second.second;
+      delete []data;
+      data = nullptr;
+    }
+  };
 
   /**
    * @brief Inserts an element into a shared queue.
@@ -94,12 +101,11 @@ class RequestChannel {
    */
   void Put(std::optional<std::unique_ptr<DiskRequest>> request) {
     std::unique_lock<std::mutex> lk(m_);
-    q_.push_front(std::move(request));
-    auto iter = q_.begin();
-    auto &r = *iter;
-    if (r.has_value()) {
-      on_queue_.insert_or_assign(r.value()->page_id_, iter);
+    auto page_id = request->get()->page_id_;
+    if (cached_.count(page_id) != 0) {
+      cached_.at(page_id).first = false;
     }
+    q_.push(std::move(request));
     lk.unlock();
     cv_.notify_all();
   }
@@ -110,31 +116,36 @@ class RequestChannel {
   auto Get() -> std::optional<std::unique_ptr<DiskRequest>> {
     std::unique_lock<std::mutex> lk(m_);
     cv_.wait(lk, [&]() { return !q_.empty(); });
-    auto r = std::move(q_.back());
-    q_.pop_back();
-    if (r.has_value()) {
-      on_queue_.erase(r.value()->page_id_);
-    }
+    auto r = std::move(q_.front());
+    q_.pop();
     return r;
   }
 
-  auto Contains(std::unique_ptr<DiskRequest> &request) -> bool {
+  auto Cached(std::unique_ptr<DiskRequest> &request) -> bool {
     std::unique_lock<std::mutex> lk(m_);
     auto page_id = request->page_id_;
-    if (on_queue_.count(page_id) != 0) {
-      auto iter = on_queue_.at(page_id);
-      auto &write_request = (*iter).value();
-      memcpy(request->data_, write_request->data_, BUSTUB_PAGE_SIZE);
+    if (cached_.count(page_id) != 0 && cached_.at(page_id).first) {
+      auto data = cached_.at(page_id).second;
+      memcpy(request->data_, data, BUSTUB_PAGE_SIZE);
       return true;
     }
     return false;
   }
 
+  void SetCache(page_id_t page_id, char *data) {
+    std::unique_lock<std::mutex> lk(m_);
+    if (cached_.count(page_id) == 0) {
+      cached_.insert({page_id, {true, new char[BUSTUB_PAGE_SIZE]}});
+    }
+    cached_[page_id].first = true;
+    memcpy(cached_[page_id].second, data, BUSTUB_PAGE_SIZE);
+  }
+
  private:
   std::mutex m_;
   std::condition_variable cv_;
-  std::deque<std::optional<std::unique_ptr<DiskRequest>>> q_;
-  std::unordered_map<page_id_t, std::deque<std::optional<std::unique_ptr<DiskRequest>>>::iterator> on_queue_;
+  std::queue<std::optional<std::unique_ptr<DiskRequest>>> q_;
+  std::unordered_map<page_id_t, std::pair<bool, char*>> cached_;
 };
 
 /**
@@ -165,8 +176,9 @@ class DiskScheduler {
    */
   void Schedule(std::unique_ptr<DiskRequest> r) {
     if (!r->is_write_) {
-      if (!request_queue_.Contains(r)) {
+      if (!request_queue_.Cached(r)) {
         disk_manager_->ReadPage(r->page_id_, r->data_);
+        request_queue_.SetCache(r->page_id_, r->data_);
       }
       r->callback_.set_value(true);
     } else {
@@ -367,7 +379,7 @@ class BufferPoolManager {
   Page *pages_;
 
   /** Pointer to the disk manager. */
-  DiskManager *disk_manager_;
+  DiskManager *disk_manager_ __attribute__((__unused__));
 
   /** Pointer to the disk sheduler. */
   std::unique_ptr<DiskScheduler> disk_scheduler_;
